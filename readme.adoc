@@ -1,0 +1,21 @@
+= Lisp in Small Pieces
+
+A collaborative learning project started in 2022
+
+This repo contains sources for the website: https://chouser.us/lisp2022
+
+To develop:
+
+----
+mkdir target
+cp *.jpg target/
+echo index.adoc | entr asciidoctor -D target /_
+----
+
+To deploy:
+
+----
+cp target/* ../chouser.github.io/lisp2022/
+----
+
+Commit and push the `chouser.github.io` repo.
