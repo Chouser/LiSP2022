@@ -53,7 +53,9 @@ really doing it together "with us" anymore. :-)
 
 I'm also hopeful people will want join a video call every so often, to show
 something they've made, to discuss what they've learned, etc.  It'd be nice if
-we got to know each others faces and voices a bit.
+we got to know each others faces and voices a bit.  Scheduling these will likely
+be difficult, so we may choose to record them and share via unlisted YouTube
+link or some such.
 
 == Next steps
 
@@ -150,7 +152,7 @@ If you have other questions or concerns, write me on twitter
 == Thanks
 
 Thanks to Viasat and the LonoCloud team for fostering an environment that can
-inspire an activity like this, and to Denise Zimmerman for edits on a draft of
-this page.
+inspire an activity like this, and to Denise Zimmerman and Aaron Brooks for
+edits on a draft of this page.
 
 --Chouser
