@@ -1,1 +1,6 @@
 target
+secrets.edn
+*.ods
+*.ods#
+.nrepl-port
+.cpcache
