@@ -64,6 +64,9 @@ image::book-open.jpg[Book-open, 400, 376, float="right"]
 1. Get the book
 
 ** You can get Kindle, hardcover, or paperback at https://www.amazon.com/Lisp-Small-Pieces-Christian-Queinnec/dp/0521545668[Amazon].
+** The publisher, Cambridge Press, sells
+   https://www.cambridge.org/us/academic/subjects/computer-science/programming-languages-and-applied-logic/lisp-small-pieces?format=AR[an
+   eBook] version.
 ** There are some (not necessarily cheaper) copies on https://www.ebay.com/sch/i.html?_nkw=LISP+in+Small+Pieces&_sacat=267[EBay]
 ** Or maybe you can find one locally, depending on where you are.
 
