@@ -1,8 +1,7 @@
 (ns us.chouser.lisp2022.status
   (:require [clojure.java.io :as io]
-            [clj-http.client]
+            [clj-http.lite.client]
             [clojure.data.json :as json]
-            [oz.core :as oz]
             [clojure.string :as str]))
 
 (defn slack [xoxb method & [query-params]]
@@ -11,7 +10,7 @@
              :accept :json
              :headers {"Authorization" (str "Bearer " xoxb)}
              :query-params query-params}
-        resp (clj-http.client/request req)
+        resp (clj-http.lite.client/request req)
         body-data (json/read-str (:body resp) :key-fn keyword)]
     (when (-> body-data :response_metadata :next_cursor seq)
       (println "WARN: next_cursor was returned"))
@@ -35,42 +34,7 @@
                              {:next-chapter-start :Xf03EBCRLYCQ
                               :last-section-done  :Xf03DML42MGB}))))))))
 
-(def col04 " ⡀⡄⡆⡇")
-(def col08 " ⡀⣀⣄⣤⣦⣶⣷⣿")
 (def col08 " ▁▂▃▄▅▆▇█")
-
-(def pairs
-  [[" ⢀⢠⢰⢸"]
-   ["⡀⣀"]
-   ["⡄"]
-   ["⡆"]
-   ["⡇"]])
-
-(def others "
-⡀  ⡁  ⡂  ⡃  ⡄  ⡅  ⡆  ⡇  ⡈  ⡉  ⡊  ⡋  ⡌  ⡍  ⡎  ⡏
-
-⡐  ⡑  ⡒  ⡓  ⡔  ⡕  ⡖  ⡗  ⡘  ⡙  ⡚  ⡛  ⡜  ⡝  ⡞  ⡟
-
-⡠  ⡡  ⡢  ⡣  ⡤  ⡥  ⡦  ⡧  ⡨  ⡩  ⡪  ⡫  ⡬  ⡭  ⡮  ⡯
-
-⡰  ⡱  ⡲  ⡳  ⡴  ⡵  ⡶  ⡷  ⡸  ⡹  ⡺  ⡻  ⡼  ⡽  ⡾  ⡿
-
-⢀  ⢁  ⢂  ⢃  ⢄  ⢅  ⢆  ⢇  ⢈  ⢉  ⢊  ⢋  ⢌  ⢍  ⢎  ⢏
-
-⢐  ⢑  ⢒  ⢓  ⢔  ⢕  ⢖  ⢗  ⢘  ⢙  ⢚  ⢛  ⢜  ⢝  ⢞  ⢟
-
-⢠  ⢡  ⢢  ⢣  ⢤  ⢥  ⢦  ⢧  ⢨  ⢩  ⢪  ⢫  ⢬  ⢭  ⢮  ⢯
-
-⢰  ⢱  ⢲  ⢳  ⢴  ⢵  ⢶  ⢷  ⢸  ⢹  ⢺  ⢻  ⢼  ⢽  ⢾  ⢿
-
-⣀  ⣁  ⣂  ⣃  ⣄  ⣅  ⣆  ⣇  ⣈  ⣉  ⣊  ⣋  ⣌  ⣍  ⣎  ⣏
-
-⣐  ⣑  ⣒  ⣓  ⣔  ⣕  ⣖  ⣗  ⣘  ⣙  ⣚  ⣛  ⣜  ⣝  ⣞  ⣟
-
-⣠  ⣡  ⣢  ⣣  ⣤  ⣥  ⣦  ⣧  ⣨  ⣩  ⣪  ⣫  ⣬  ⣭  ⣮  ⣯
-
-⣰  ⣱  ⣲  ⣳  ⣴  ⣵  ⣶  ⣷  ⣸  ⣹  ⣺  ⣻  ⣼  ⣽  ⣾  ⣿
-")
 
 (defn clipstr
   "Return a string of exactly length `len` by either truncating or adding spaces
@@ -83,11 +47,13 @@
 (def yyyy-MM-dd (java.text.SimpleDateFormat. "yyyy-MM-dd"))
 (def MM-dd (java.text.SimpleDateFormat. "MM-dd"))
 
-(defn histogram [xs minrange labelfn]
-  (let [chars col08
-        xscale 40
-        yscale 8
-        maxchar (dec (count chars))
+(defn histogram [{:keys [xs minrange chars xscale yscale labelfn]
+                  :or {minrange 1
+                       chars col08
+                       xscale 40
+                       yscale 8
+                       labelfn identity}}]
+  (let [maxchar (dec (count chars))
         minx (apply min xs)
         maxx (apply max xs)
         [minx maxx] (if (< minrange (- maxx minx))
@@ -118,39 +84,64 @@
               ""
               labels)])))
 
+(def sections (next (.split #"\s+" "
+    1.1
+    1.2
+    1.3
+    1.4.1 1.4.2 1.4.3 1.4.4 1.4.5 1.4.6
+    1.5
+    1.6.1 1.6.2
+    1.7
+    1.8
+    1.9
+    1.10
+    2.1
+    2.2.1 2.2.2 2.2.3 2.2.4
+    2.3
+    2.4
+    2.5.1 2.5.2 2.5.3 2.5.4
+    2.6.1 2.6.2 2.6.3 2.6.4 2.6.5 2.6.6
+    2.7
+    2.8")))
+
+(def sections-index (zipmap sections (range)))
+(def index-sections (zipmap (range) sections))
+
 (defn go1 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))]
-    (def x (all-user-profiles xoxb))
-
-    #_
-    (slack xoxb :chat.postMessage
-           {:channel "U03BTEC3352"
-            :blocks (json/write-str [{"type" "image",
-                                      "block_id" "image4",
-                                      "image_url" "",
-                                      "alt_text" "An incredibly cute kitten."}])})))
+    (def x (all-user-profiles xoxb))))
 
 (defn go2 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))
-        xs (concat
-            (keep :next-chapter-start x)
-            (repeatedly 30 #(format "2022-07-%02d" (rand-int 30))))
-        lines (histogram (map #(.getTime (.parse yyyy-MM-dd %)) xs)
-                         (* 40 1000 60 60 24)
-                         #(.format MM-dd %))]
+        done-data (keep :last-section-done x)
+        done-lines (histogram {:xs (map #(get sections-index % 0) done-data)
+                               :xscale 60
+                               :minrange 5
+                               :labelfn #(index-sections (int %))})
+        next-data (concat
+                   (keep :next-chapter-start x)
+                   #_(repeatedly 30 #(format "2022-07-%02d" (rand-int 30))))
+        next-lines (histogram {:xs (map #(.getTime (.parse yyyy-MM-dd %)) next-data)
+                               :xscale 60
+                               :minrange (* 60 1000 60 60 24)
+                               :labelfn #(.format MM-dd %)})]
     (slack xoxb :chat.postMessage
            {:channel "U03BTEC3352"
             :blocks (json/write-str
                      [{:type :header
                        :text {:type :plain_text
-                              :text "Progress report aggregation"}}
+                              :text "Aggregated progress report"}}
                       {:type :section
                        :text {:type :mrkdwn
                               :text (str/join
                                      "\n"
-                                     (concat ["When should we start Chapter 2?"
+                                     (concat ["What's the last section completed?"
                                               "```"]
-                                             lines
+                                             done-lines
+                                             ["```"
+                                              "When should we start Chapter 2?"
+                                              "```"]
+                                             next-lines
                                              ["```"]))}}])})))
 
 (comment
