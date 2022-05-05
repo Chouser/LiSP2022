@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [clj-http.lite.client]
             [clojure.data.json :as json]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.edn :as edn]))
 
 (defn slack [xoxb method & [query-params]]
   (let [req {:url (str "https://slack.com/api/" (name method))
@@ -33,6 +34,24 @@
                                {k (-> profile :fields v :value)})
                              {:next-chapter-start :Xf03EBCRLYCQ
                               :last-section-done  :Xf03DML42MGB}))))))))
+
+(defn update-user-profiles [xoxb old-profiles]
+  (update-vals (into {}
+                 (map (juxt :id identity))
+                 (:members (slack xoxb :users.list)))
+               (fn [{:keys [id] :as user}]
+                 (let [old-user (get old-profiles id)]
+                   (if (= (:updated user) (:updated old-user))
+                     old-user
+                     (let [{:keys [profile]} (slack xoxb :users.profile.get
+                                                    {:user id})]
+                       (apply merge
+                              (dissoc user :profile)
+                              (dissoc profile :fields)
+                              (map (fn [[k v]]
+                                     {k (-> profile :fields v :value)})
+                                   {:next-chapter-start :Xf03EBCRLYCQ
+                                    :last-section-done  :Xf03DML42MGB}))))))))
 
 (def col08 " ▁▂▃▄▅▆▇█")
 
@@ -107,6 +126,70 @@
 (def sections-index (zipmap sections (range)))
 (def index-sections (zipmap (range) sections))
 
+(defn parse-progress [text]
+  (try
+    (when-let [[_ m] (re-find #"(\{.*})" text)]
+      (-> (edn/read-string m)
+          (as-> progress
+            (if-let [s (:next-chapter-date progress)]
+              (assoc progress :next-chapter-start
+                     (or (try (doto (.parse MM-dd s)
+                                (.setYear (.getYear (java.util.Date.))))
+                              (catch Exception ex))
+                         (.parse yyyy-MM-dd s)))
+              progress)
+            (if-let [s (:last-section-done progress)]
+              (if-not (sections-index s)
+                (throw (ex-info (str "Unknown section: " (pr-str s)) {:s s}))
+                progress)
+              progress)
+            (if (or (not (map? progress)) (empty? progress))
+              (throw (ex-info (str "Expected map keys `:next-chapter-date` "
+                                   "and/or `:last-section-done1")
+                              {}))
+              progress))))
+    (catch Exception ex
+      {:error (.getMessage ex)})))
+
+(defn update-progress [xoxb progress]
+  (reduce (fn [progress message]
+            (let [p (parse-progress (:text message))
+                  mts (BigDecimal. (:ts message))]
+              (when p
+                (try
+                  (slack xoxb :reactions.add {:channel "C03DKM2M7SA"
+                                              :timestamp (:ts message)
+                                              :name (if (:error p)
+                                                      "no"
+                                                      "yes")})
+                  (catch Exception ex
+                    (if (-> ex ex-data :slack-data :error (= "already_reacted"))
+                      :ignore
+                      (throw ex)))))
+              (if (or (not p) (:error p))
+                progress
+                (update progress (:user message)
+                        (fn [oldp]
+                          (if (and (:ts oldp) (<= mts (:ts oldp)))
+                            oldp
+                            (assoc p :ts mts)))))))
+          progress
+          (:messages (slack xoxb :conversations.history
+                            {:channel "C03DKM2M7SA"
+                             :latest ""}))))
+
+(defonce *state (atom (try (read-string (slurp "state.edn"))
+                           (catch Exception ex nil))))
+
+(defn go []
+  (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))]
+    (swap! *state
+           (fn [state]
+             (-> state
+                 (update :profiles #(update-user-profiles xoxb %))
+                 (update :progress #(update-progress xoxb %)))))
+    (spit "state.edn" (prn-str @*state))))
+
 (defn go1 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))]
     (def x (all-user-profiles xoxb))))
@@ -146,7 +229,7 @@
 
 (comment
 
-  (map #(select-keys % [:display_name :next-chapter-start :last-section-done]) (filter :next-chapter-start x))
+  (map #(select-keys % [:display_name :next-chapter-start :last-section-done]) (filter :next-chapter-start (vals profs)))
 
   (let [sample (repeatedly 40 #(format "2022-05-%02d" (rand-int 10)))]
     (run! println (histogram (map #(.getTime (.parse yyyy-MM-dd %)) sample)
