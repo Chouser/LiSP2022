@@ -190,12 +190,29 @@
                  (update :progress #(update-progress xoxb %)))))
     (spit "state.edn" (prn-str @*state))))
 
+(defn merge-latest-progress [state]
+  (merge-with
+   (fn [a b]
+     (if (< (:ts a) (:ts b))
+       (merge a b)
+       (merge b a)))
+   (:progress state)
+   (update-vals (:profiles state)
+                (fn [profile]
+                  (cond-> {:real_name (:real_name profile)
+                           :ts (:updated profile)}
+                    (:last-section-done profile) (assoc :last-section-done (:last-section-done profile))
+                    (:next-chapter-start profile) (assoc :next-chapter-start
+                                                         (.parse yyyy-MM-dd (:next-chapter-start profile))))))))
+               
+
 (defn go1 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))]
     (def x (all-user-profiles xoxb))))
 
 (defn go2 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))
+        x (vals (merge-latest-progress @*state))
         done-data (keep :last-section-done x)
         done-lines (histogram {:xs (map #(get sections-index % 0) done-data)
                                :xscale 60
@@ -204,7 +221,7 @@
         next-data (concat
                    (keep :next-chapter-start x)
                    #_(repeatedly 30 #(format "2022-07-%02d" (rand-int 30))))
-        next-lines (histogram {:xs (map #(.getTime (.parse yyyy-MM-dd %)) next-data)
+        next-lines (histogram {:xs (map #(.getTime %) next-data)
                                :xscale 60
                                :minrange (* 60 1000 60 60 24)
                                :labelfn #(.format MM-dd %)})]
@@ -222,7 +239,7 @@
                                               "```"]
                                              done-lines
                                              ["```"
-                                              "When should we start Chapter 2?"
+                                              "When should we start the next chapter?"
                                               "```"]
                                              next-lines
                                              ["```"]))}}])})))
