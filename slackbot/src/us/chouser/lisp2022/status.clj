@@ -5,6 +5,10 @@
             [clojure.string :as str]
             [clojure.edn :as edn]))
 
+(def channel-progress "C03DKM2M7SA")
+(def user-chouser "U03BTEC3352")
+(def user-bot "U03DF1E6KDL")
+
 (defn slack [xoxb method & [query-params]]
   (let [req {:url (str "https://slack.com/api/" (name method))
              :method :post
@@ -20,20 +24,6 @@
                            (pr-str (:error body-data)))
                       {:slack-data body-data})))
     body-data))
-
-(defn all-user-profiles [xoxb]
-  (lazy-seq
-   (->> (:members (slack xoxb :users.list))
-        (map (fn [user]
-               (let [{:keys [profile]} (slack xoxb :users.profile.get
-                                              {:user (-> user :id)})]
-                 (apply merge
-                        (dissoc user :profile)
-                        (dissoc profile :fields)
-                        (map (fn [[k v]]
-                               {k (-> profile :fields v :value)})
-                             {:next-chapter-start :Xf03EBCRLYCQ
-                              :last-section-done  :Xf03DML42MGB}))))))))
 
 (defn update-user-profiles [xoxb old-profiles]
   (update-vals (into {}
@@ -61,7 +51,7 @@
   [string len]
   (if (< (count string) len)
     (str string (apply str (repeat (- len (count string)) " ")))
-    (subs string 0 len)))
+    (subs string 0 (max 0 len))))
 
 (def yyyy-MM-dd (java.text.SimpleDateFormat. "yyyy-MM-dd"))
 (def MM-dd (java.text.SimpleDateFormat. "MM-dd"))
@@ -107,28 +97,39 @@
     1.1
     1.2
     1.3
-    1.4.1 1.4.2 1.4.3 1.4.4 1.4.5 1.4.6
+    1.4.0 1.4.1 1.4.2 1.4.3 1.4.4 1.4.5 1.4.6 1.4
     1.5
-    1.6.1 1.6.2
+    1.6.0 1.6.1 1.6.2 1.6
     1.7
     1.8
     1.9
-    1.10
+    1.10 1.10.11
+    2.0
     2.1
-    2.2.1 2.2.2 2.2.3 2.2.4
+    2.2.0 2.2.1 2.2.2 2.2.3 2.2.4 2.2
     2.3
     2.4
-    2.5.1 2.5.2 2.5.3 2.5.4
-    2.6.1 2.6.2 2.6.3 2.6.4 2.6.5 2.6.6
+    2.5.0 2.5.1 2.5.2 2.5.3 2.5.4 2.5
+    2.6.0 2.6.1 2.6.2 2.6.3 2.6.4 2.6.5 2.6.6 2.6
     2.7
-    2.8")))
+    2.8
+    3.1
+    3.1.0 3.1.1 3.1.2 3.1.3 3.1.4.3.1.5 3.1.6
+    3.2.0 3.2.1 3.2.2 3.2.3 3.2.4 3.2.5 3.2.6 3.2.7
+    3.3
+    3.4.0 3.4.1 3.4.2 3.4.3 3.4.4
+    3.5
+    3.6.0 3.6.1 3.6 2
+    3.7
+    3.8
+    3.9")))
 
 (def sections-index (zipmap sections (range)))
 (def index-sections (zipmap (range) sections))
 
 (defn parse-progress [text]
   (try
-    (when-let [[_ m] (re-find #"(\{.*})" text)]
+    (when-let [[_ m] (re-find #"(\{.*)" text)]
       (-> (edn/read-string m)
           (as-> progress
             (if-let [s (:next-chapter-date progress)]
@@ -156,16 +157,20 @@
             (let [p (parse-progress (:text message))
                   mts (BigDecimal. (:ts message))]
               (when p
-                (try
-                  (slack xoxb :reactions.add {:channel "C03DKM2M7SA"
-                                              :timestamp (:ts message)
-                                              :name (if (:error p)
-                                                      "no"
-                                                      "yes")})
-                  (catch Exception ex
-                    (if (-> ex ex-data :slack-data :error (= "already_reacted"))
-                      :ignore
-                      (throw ex)))))
+                (let [my-rs (->> (:reactions message)
+                                 (filter (fn [r] (some (partial = user-bot) (:users r))))
+                                 (map :name)
+                                 set)
+                      new-r (if (:error p) "x" "white_check_mark")
+                      msg-id {:channel channel-progress
+                              :timestamp (:ts message)}]
+                  (when (:error p)
+                    (prn (:error p) (:text message)))
+                  (when-not (my-rs new-r)
+                    (slack xoxb :reactions.add (assoc msg-id :name new-r)))
+                  (run!
+                   #(slack xoxb :reactions.remove (assoc msg-id :name %))
+                   (disj my-rs new-r))))
               (if (or (not p) (:error p))
                 progress
                 (update progress (:user message)
@@ -175,7 +180,7 @@
                             (assoc p :ts mts)))))))
           progress
           (:messages (slack xoxb :conversations.history
-                            {:channel "C03DKM2M7SA"
+                            {:channel channel-progress
                              :latest ""}))))
 
 (defonce *state (atom (try (read-string (slurp "state.edn"))
@@ -204,15 +209,25 @@
                     (:last-section-done profile) (assoc :last-section-done (:last-section-done profile))
                     (:next-chapter-start profile) (assoc :next-chapter-start
                                                          (.parse yyyy-MM-dd (:next-chapter-start profile))))))))
-               
 
-(defn go1 []
-  (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))]
-    (def x (all-user-profiles xoxb))))
+(defn date-to-ts ^long [^java.util.Date d]
+  (quot (.getTime d) 1000))
+
+(defn ^java.util.Date ts-to-date [^long ts]
+  (java.util.Date. (* 1000 (long ts))))
+
+(defn remove-status-before [end-prev-chapter-date-str]
+  (let [end-prev-chapter-ts (date-to-ts (.parse yyyy-MM-dd end-prev-chapter-date-str))]
+    (filter #(and (:ts %)
+                  (< end-prev-chapter-ts (:ts %))
+                  (:next-chapter-start %)
+                  (< end-prev-chapter-ts (date-to-ts (:next-chapter-start %)))))))
 
 (defn go2 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))
-        x (vals (merge-latest-progress @*state))
+        x (into []
+                (remove-status-before "2022-05-24")
+                (vals (merge-latest-progress @*state)))
         done-data (keep :last-section-done x)
         done-lines (histogram {:xs (map #(get sections-index % 0) done-data)
                                :xscale 60
@@ -226,7 +241,7 @@
                                :minrange (* 60 1000 60 60 24)
                                :labelfn #(.format MM-dd %)})]
     (slack xoxb :chat.postMessage
-           {:channel "U03BTEC3352"
+           {:channel channel-progress #_user-chouser
             :blocks (json/write-str
                      [{:type :header
                        :text {:type :plain_text
