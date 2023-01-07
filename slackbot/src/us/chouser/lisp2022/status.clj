@@ -122,7 +122,19 @@
     3.6.0 3.6.1 3.6 2
     3.7
     3.8
-    3.9")))
+    3.9
+    4.1 4.1.1 4.1.2 4.1.3
+    4.2 4.2.1 4.2.2
+    4.3 4.3.1 4.3.2 4.3.3 4.3.4 4.3.5 4.3.6 4.3.7 4.3.8 4.3.9 4.3.10 4.3.11
+        4.3.12 4.3.13 4.3.14
+    4.4 4.5 4.6 4.7
+    5.1
+    5.2 5.2.1 5.2.2 5.2.3 5.2.4 5.2.5 5.2.6 5.2.7 5.2.8
+    5.3 5.4 5.5 5.6
+    5.7 5.7.1 5.7.2 5.7.3
+    5.8
+    5.9 5.9.1 5.9.2
+    5.10 5.11")))
 
 (def sections-index (zipmap sections (range)))
 (def index-sections (zipmap (range) sections))
@@ -220,8 +232,8 @@
   (let [end-prev-chapter-ts (date-to-ts (.parse yyyy-MM-dd end-prev-chapter-date-str))]
     (filter #(and (:ts %)
                   (< end-prev-chapter-ts (:ts %))
-                  (:next-chapter-start %)
-                  (< end-prev-chapter-ts (date-to-ts (:next-chapter-start %)))))))
+                  (or (nil? (:next-chapter-start %))
+                      (< end-prev-chapter-ts (date-to-ts (:next-chapter-start %))))))))
 
 (defn go2 []
   (let [{:keys [xoxb]} (read-string (slurp "secrets.edn"))
@@ -253,6 +265,7 @@
                                      (concat ["What's the last section completed?"
                                               "```"]
                                              done-lines
+                                             #_#_
                                              ["```"
                                               "When should we start the next chapter?"
                                               "```"]
